@@ -5,13 +5,14 @@ import { DefaultChatTransport } from "ai";
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { X, Send, MessageSquare, Loader2 } from "lucide-react";
+import { X, Send, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatPanelProps {
   owner: string;
   repo: string;
   activeFeatureId: string;
+  wikiContext: string;
   onClose: () => void;
 }
 
@@ -19,6 +20,7 @@ export function ChatPanel({
   owner,
   repo,
   activeFeatureId,
+  wikiContext,
   onClose,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
@@ -27,9 +29,9 @@ export function ChatPanel({
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: { owner, repo },
+        body: { owner, repo, wikiContext },
       }),
-    [owner, repo]
+    [owner, repo, wikiContext]
   );
 
   const { messages, sendMessage, status, error, clearError } = useChat({
@@ -97,10 +99,7 @@ export function ChatPanel({
         ))}
 
         {isLoading && messages[messages.length - 1]?.role !== "assistant" && (
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            <span className="text-xs">Thinking...</span>
-          </div>
+          <TypingIndicator />
         )}
 
         {error && (
@@ -143,6 +142,18 @@ export function ChatPanel({
   );
 }
 
+function TypingIndicator() {
+  return (
+    <div className="flex justify-start">
+      <div className="flex items-center gap-1.5 rounded-lg bg-card px-4 py-3">
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-[pulse_1.4s_ease-in-out_infinite]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-[pulse_1.4s_ease-in-out_0.2s_infinite]" />
+        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-[pulse_1.4s_ease-in-out_0.4s_infinite]" />
+      </div>
+    </div>
+  );
+}
+
 function ChatMessage({
   message,
 }: {
@@ -154,6 +165,10 @@ function ChatMessage({
       ?.filter((p) => p.type === "text")
       .map((p) => p.text)
       .join("") ?? "";
+
+  if (!isUser && !text) {
+    return <TypingIndicator />;
+  }
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>

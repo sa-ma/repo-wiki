@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import type { Wiki } from "@/types";
 import { WikiSidebar } from "./wiki-sidebar";
 import { WikiContent } from "./wiki-content";
 import { ChatPanel } from "./chat-panel";
+import { serializeWikiToMarkdown } from "@/lib/pipeline/serialize";
 import { ExternalLink, Menu, X, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +24,8 @@ export function WikiShell({ wiki }: { wiki: Wiki }) {
   const [owner, repo] = wiki.repoUrl
     .replace("https://github.com/", "")
     .split("/");
+
+  const wikiContext = useMemo(() => serializeWikiToMarkdown(wiki), [wiki]);
 
   return (
     <div className="flex h-svh flex-col">
@@ -119,25 +123,30 @@ export function WikiShell({ wiki }: { wiki: Wiki }) {
           )}
         </main>
 
-        {/* Chat panel */}
+        {/* Mobile backdrop */}
         {chatOpen && (
-          <>
-            {/* Mobile backdrop */}
-            <div
-              className="fixed inset-0 z-40 bg-black/60 md:hidden"
-              onClick={() => setChatOpen(false)}
-            />
-            {/* Panel: fixed on mobile, static on desktop */}
-            <aside className="fixed inset-y-12 right-0 z-50 w-full max-w-sm md:static md:z-auto md:w-[400px] md:max-w-none shrink-0">
-              <ChatPanel
-                owner={owner}
-                repo={repo}
-                activeFeatureId={activeFeatureId}
-                onClose={() => setChatOpen(false)}
-              />
-            </aside>
-          </>
+          <div
+            className="fixed inset-0 z-40 bg-black/60 md:hidden"
+            onClick={() => setChatOpen(false)}
+          />
         )}
+
+        {/* Chat panel — always mounted to preserve state */}
+        <aside
+          className={`${
+            chatOpen
+              ? "fixed inset-y-12 right-0 z-50 w-full max-w-sm md:static md:z-auto md:w-[400px] md:max-w-none shrink-0"
+              : "hidden"
+          }`}
+        >
+          <ChatPanel
+            owner={owner}
+            repo={repo}
+            activeFeatureId={activeFeatureId}
+            wikiContext={wikiContext}
+            onClose={() => setChatOpen(false)}
+          />
+        </aside>
       </div>
     </div>
   );
