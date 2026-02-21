@@ -5,7 +5,8 @@ import Link from "next/link";
 import type { Wiki } from "@/types";
 import { WikiSidebar } from "./wiki-sidebar";
 import { WikiContent } from "./wiki-content";
-import { ExternalLink, Menu, X } from "lucide-react";
+import { ChatPanel } from "./chat-panel";
+import { ExternalLink, Menu, X, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function WikiShell({ wiki }: { wiki: Wiki }) {
@@ -13,8 +14,14 @@ export function WikiShell({ wiki }: { wiki: Wiki }) {
     wiki.features[0]?.id ?? ""
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const activeFeature = wiki.features.find((f) => f.id === activeFeatureId);
+
+  // Parse owner/repo from repoUrl (e.g., "https://github.com/owner/repo")
+  const [owner, repo] = wiki.repoUrl
+    .replace("https://github.com/", "")
+    .split("/");
 
   return (
     <div className="flex h-svh flex-col">
@@ -62,6 +69,17 @@ export function WikiShell({ wiki }: { wiki: Wiki }) {
           {wiki.repoName}
           <ExternalLink className="h-3 w-3" />
         </a>
+
+        {/* Chat toggle */}
+        <Button
+          variant="ghost"
+          size="sm"
+          className={`ml-auto ${chatOpen ? "text-primary" : "text-muted-foreground"}`}
+          onClick={() => setChatOpen(!chatOpen)}
+        >
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+          Ask AI
+        </Button>
       </header>
 
       {/* Body */}
@@ -100,6 +118,26 @@ export function WikiShell({ wiki }: { wiki: Wiki }) {
             </p>
           )}
         </main>
+
+        {/* Chat panel */}
+        {chatOpen && (
+          <>
+            {/* Mobile backdrop */}
+            <div
+              className="fixed inset-0 z-40 bg-black/60 md:hidden"
+              onClick={() => setChatOpen(false)}
+            />
+            {/* Panel: fixed on mobile, static on desktop */}
+            <aside className="fixed inset-y-12 right-0 z-50 w-full max-w-sm md:static md:z-auto md:w-[400px] md:max-w-none shrink-0">
+              <ChatPanel
+                owner={owner}
+                repo={repo}
+                activeFeatureId={activeFeatureId}
+                onClose={() => setChatOpen(false)}
+              />
+            </aside>
+          </>
+        )}
       </div>
     </div>
   );
