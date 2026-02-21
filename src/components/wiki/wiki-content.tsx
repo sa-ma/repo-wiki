@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Feature, Citation, CodeSnippet } from "@/types";
 import { ExternalLink } from "lucide-react";
+import { HighlightedCode } from "./highlighted-code";
 
 interface WikiContentProps {
   feature: Feature;
@@ -46,9 +47,9 @@ export function WikiContent({ feature, repoUrl }: WikiContentProps) {
             </div>
 
             {/* Code snippets */}
-            {section.codeSnippets.map((snippet) => (
+            {section.codeSnippets.map((snippet, i) => (
               <CodeBlock
-                key={snippet.citation.id}
+                key={snippet.citation.id || i}
                 snippet={snippet}
                 repoUrl={repoUrl}
               />
@@ -88,10 +89,15 @@ function CodeBlock({
   return (
     <div className="mt-3 overflow-hidden rounded-lg border border-border/60">
       <div className="flex items-center justify-between border-b border-border/40 bg-card px-3 py-1.5">
-        <span className="font-mono text-[11px] text-muted-foreground/70">
-          {snippet.citation.file}:{snippet.citation.startLine}-
-          {snippet.citation.endLine}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+            {snippet.language}
+          </span>
+          <span className="font-mono text-[11px] text-muted-foreground/70">
+            {snippet.citation.file}:{snippet.citation.startLine}-
+            {snippet.citation.endLine}
+          </span>
+        </div>
         <a
           href={snippet.citation.url}
           target="_blank"
@@ -102,9 +108,7 @@ function CodeBlock({
           <ExternalLink className="h-2.5 w-2.5" />
         </a>
       </div>
-      <pre className="overflow-x-auto bg-muted/50 p-3 text-[13px] leading-5">
-        <code>{snippet.code}</code>
-      </pre>
+      <HighlightedCode code={snippet.code} language={snippet.language} />
     </div>
   );
 }

@@ -92,3 +92,13 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Shiki code block overrides */
+.shiki {
+  background-color: transparent !important;
+}
+
+.shiki code {
+  font-family: var(--font-geist-mono);
+  background-color: transparent;
+}
