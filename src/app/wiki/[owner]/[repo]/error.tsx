@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function WikiError({
   error,
+  reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
@@ -39,7 +40,7 @@ export default function WikiError({
         <div className="flex flex-col items-center gap-6 text-center">
           <AlertCircle className="h-8 w-8 text-destructive" />
           <div className="flex flex-col gap-1.5">
-            <h2 className="text-sm font-medium">Failed to generate wiki</h2>
+            <h2 className="text-sm font-medium">Something went wrong</h2>
             <p className="max-w-sm text-sm text-muted-foreground">
               {error.message}
             </p>
@@ -51,7 +52,7 @@ export default function WikiError({
                 Home
               </Link>
             </Button>
-            <Button size="sm" onClick={() => window.location.reload()}>
+            <Button size="sm" onClick={() => reset()}>
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
               Try again
             </Button>

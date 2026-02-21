@@ -1,5 +1,6 @@
-import { generateWiki } from "@/lib/pipeline";
+import { getCachedWiki } from "@/lib/pipeline";
 import { WikiShell } from "@/components/wiki/wiki-shell";
+import { WikiGenerator } from "@/components/wiki/wiki-generator";
 
 export default async function WikiPage({
   params,
@@ -7,7 +8,11 @@ export default async function WikiPage({
   params: Promise<{ owner: string; repo: string }>;
 }) {
   const { owner, repo } = await params;
-  const wiki = await generateWiki(owner, repo);
+  const cached = getCachedWiki(owner, repo);
 
-  return <WikiShell wiki={wiki} />;
+  if (cached) {
+    return <WikiShell wiki={cached} />;
+  }
+
+  return <WikiGenerator owner={owner} repo={repo} />;
 }

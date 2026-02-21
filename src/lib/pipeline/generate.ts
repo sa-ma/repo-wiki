@@ -1,11 +1,14 @@
 import { generateText, Output } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { fetchRepoMeta, fetchRepoTree } from "@/lib/github";
-import type { Wiki } from "@/types";
+import { GitHubError } from "@/lib/github/errors";
+import type { Wiki, ProgressEvent } from "@/types";
 import { wikiModelSchema } from "./schemas";
 import { buildFilePickerPrompt, buildFilePickerContext, buildWikiPrompt, buildContextString } from "./prompts";
 import { filePickerSchema, prefetchFiles } from "./prefetch";
 import { getCachedWiki, setCachedWiki } from "./cache";
+
+export type ProgressCallback = (event: ProgressEvent) => void;
 
 const inflight = new Map<string, Promise<Wiki>>();
 
@@ -37,17 +40,70 @@ export async function generateWiki(owner: string, repo: string): Promise<Wiki> {
   }
 }
 
-async function runPipeline(owner: string, repo: string): Promise<Wiki> {
+export async function generateWikiWithProgress(
+  owner: string,
+  repo: string,
+  onProgress: ProgressCallback,
+): Promise<Wiki> {
+  const cached = getCachedWiki(owner, repo);
+  if (cached) {
+    console.log("[pipeline] Cache hit for %s/%s", owner, repo);
+    return cached;
+  }
+
+  const key = inflightKey(owner, repo);
+  const existing = inflight.get(key);
+  if (existing) {
+    console.log("[pipeline] Joining in-flight request for %s/%s", owner, repo);
+    onProgress({ phase: "generating_wiki", message: "Generation in progress...", progress: 50 });
+    return existing;
+  }
+
+  const promise = runPipeline(owner, repo, onProgress);
+  inflight.set(key, promise);
+
+  try {
+    return await promise;
+  } finally {
+    inflight.delete(key);
+  }
+}
+
+async function runPipeline(
+  owner: string,
+  repo: string,
+  onProgress?: ProgressCallback,
+): Promise<Wiki> {
   const pipelineStart = Date.now();
+
+  onProgress?.({
+    phase: "fetching_metadata",
+    message: "Fetching repository data...",
+    progress: 5,
+  });
 
   const meta = await fetchRepoMeta(owner, repo);
   const tree = await fetchRepoTree(owner, repo, meta.defaultBranch);
+
+  if (tree.nodes.length > 10_000) {
+    throw new GitHubError(
+      "This repository is too large to process (over 10,000 source files after filtering)",
+      "FILE_TOO_LARGE",
+    );
+  }
 
   const gatherTime = Date.now() - pipelineStart;
   console.log(
     "[pipeline] Fetched metadata + tree for %s/%s in %dms (%d files)",
     owner, repo, gatherTime, tree.nodes.length,
   );
+
+  onProgress?.({
+    phase: "picking_files",
+    message: "Analyzing source code...",
+    progress: 15,
+    detail: `${tree.nodes.length} files in tree`,
+  });
 
   const pickerStart = Date.now();
   const pickerResult = await generateText({
@@ -80,6 +136,13 @@ async function runPipeline(owner: string, repo: string): Promise<Wiki> {
     throw new Error("File picker returned no valid file paths");
   }
 
+  onProgress?.({
+    phase: "fetching_files",
+    message: `Reading ${validPaths.length} source files...`,
+    progress: 30,
+    detail: `${validPaths.length} files selected`,
+  });
+
   const fetchStart = Date.now();
   const files = await prefetchFiles(owner, repo, validPaths);
   const fetchTime = Date.now() - fetchStart;
@@ -88,6 +151,13 @@ async function runPipeline(owner: string, repo: string): Promise<Wiki> {
 
   const contextString = buildContextString(meta, tree, files);
   console.log("[pipeline] Context string: %d chars", contextString.length);
+
+  onProgress?.({
+    phase: "generating_wiki",
+    message: "Generating documentation...",
+    progress: 40,
+    detail: `${files.length} files loaded`,
+  });
 
   const llmStart = Date.now();
   const result = await generateText({

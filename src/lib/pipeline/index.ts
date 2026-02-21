@@ -1,2 +1,3 @@
-export { generateWiki } from "./generate";
+export { generateWiki, generateWikiWithProgress } from "./generate";
+export type { ProgressCallback } from "./generate";
 export { getCachedWiki, setCachedWiki } from "./cache";

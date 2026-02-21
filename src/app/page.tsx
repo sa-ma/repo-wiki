@@ -95,7 +95,7 @@ export default function Home() {
         <div className="flex flex-col items-center gap-2.5">
           <p className="text-xs text-muted-foreground/60">Try an example</p>
           <div className="flex flex-wrap justify-center gap-1.5">
-            {["vercel/next.js", "facebook/react", "expressjs/express"].map(
+            {["Textualize/rich-cli", "browser-use/browser-use", "tastejs/todomvc"].map(
               (repo) => (
                 <button
                   key={repo}
