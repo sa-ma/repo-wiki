@@ -6,6 +6,7 @@ export async function fetchFileContent(
   owner: string,
   repo: string,
   path: string,
+  sha?: string,
 ): Promise<FileContent> {
   try {
     const response = await octokit.rest.repos.getContent({ owner, repo, path });
@@ -33,7 +34,7 @@ export async function fetchFileContent(
 
     // Files >1MB return 403 from Contents API — fall back to Blobs API
     if (isFileTooLargeError(error)) {
-      return fetchViaBlob(owner, repo, path);
+      return fetchViaBlob(owner, repo, path, sha);
     }
 
     throw mapOctokitError(error);
@@ -44,33 +45,37 @@ async function fetchViaBlob(
   owner: string,
   repo: string,
   path: string,
+  sha?: string,
 ): Promise<FileContent> {
   try {
-    // Get the file's SHA from the tree first
-    const treeResponse = await octokit.rest.repos.getContent({ owner, repo, path });
-    const data = treeResponse.data;
-
-    if (Array.isArray(data) || data.type !== "file") {
-      throw new GitHubError(`Path is not a file: ${path}`, "NOT_FOUND", 404);
+    // Use the SHA from the tree if available; otherwise fall back to getContent
+    let fileSha = sha;
+    if (!fileSha) {
+      const treeResponse = await octokit.rest.repos.getContent({ owner, repo, path });
+      const data = treeResponse.data;
+      if (Array.isArray(data) || data.type !== "file") {
+        throw new GitHubError(`Path is not a file: ${path}`, "NOT_FOUND", 404);
+      }
+      fileSha = data.sha;
     }
 
     const blobResponse = await octokit.rest.git.getBlob({
       owner,
       repo,
-      file_sha: data.sha,
+      file_sha: fileSha,
     });
 
     const content = Buffer.from(blobResponse.data.content, "base64").toString("utf-8");
 
     if (isBinary(content)) {
-      return { path, content: "", size: blobResponse.data.size ?? 0, sha: data.sha, truncated: true };
+      return { path, content: "", size: blobResponse.data.size ?? 0, sha: fileSha, truncated: true };
     }
 
     return {
       path,
       content,
       size: blobResponse.data.size ?? 0,
-      sha: data.sha,
+      sha: fileSha,
       truncated: false,
     };
   } catch (error) {

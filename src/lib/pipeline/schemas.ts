@@ -1,8 +1,5 @@
 import { z } from "zod";
 
-// Schema for OpenAI structured output — all fields required, no .default() or .optional().
-// OpenAI strict mode rejects optional properties.
-
 const citationModelSchema = z.object({
   file: z.string(),
   startLine: z.number(),

@@ -17,10 +17,11 @@ export async function prefetchFiles(
   owner: string,
   repo: string,
   paths: string[],
+  shas?: Map<string, string>,
 ): Promise<PreFetchedFile[]> {
   const results = await Promise.allSettled(
     paths.map(async (path) => {
-      const file = await fetchFileContent(owner, repo, path);
+      const file = await fetchFileContent(owner, repo, path, shas?.get(path));
       const lines = file.content.split("\n");
       const content =
         lines.length > MAX_LINES_PER_FILE
@@ -31,7 +32,23 @@ export async function prefetchFiles(
     }),
   );
 
-  return results
-    .filter((r): r is PromiseFulfilledResult<PreFetchedFile> => r.status === "fulfilled")
-    .map((r) => r.value);
+  const fulfilled: PreFetchedFile[] = [];
+  const failed: string[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].status === "fulfilled") {
+      fulfilled.push((results[i] as PromiseFulfilledResult<PreFetchedFile>).value);
+    } else {
+      failed.push(paths[i]);
+    }
+  }
+
+  if (failed.length > 0) {
+    console.warn(
+      "[pipeline] Failed to fetch %d/%d files: %s",
+      failed.length, paths.length, failed.join(", "),
+    );
+  }
+
+  return fulfilled;
 }

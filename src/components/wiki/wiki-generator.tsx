@@ -40,9 +40,8 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
   });
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const connect = useCallback(() => {
+  const startConnection = useCallback(() => {
     eventSourceRef.current?.close();
-    setState({ status: "loading", phase: "connecting", progress: 0 });
 
     const es = new EventSource(`/api/wiki/${owner}/${repo}`);
     eventSourceRef.current = es;
@@ -84,9 +83,14 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
   }, [owner, repo]);
 
   useEffect(() => {
-    connect();
+    startConnection();
     return () => eventSourceRef.current?.close();
-  }, [connect]);
+  }, [startConnection]);
+
+  function handleRetry() {
+    setState({ status: "loading", phase: "connecting", progress: 0 });
+    startConnection();
+  }
 
   if (state.status === "complete") {
     return <WikiShell wiki={state.wiki} />;
@@ -98,7 +102,7 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
         code={state.code}
         message={state.message}
         retryAfter={state.retryAfter}
-        onRetry={connect}
+        onRetry={handleRetry}
       />
     );
   }
@@ -243,7 +247,7 @@ function ProgressView({
             </div>
 
             <p className="text-xs text-muted-foreground/60">
-              This usually takes 60–90 seconds
+              This can take up to 5 minutes — go grab a coffee while we work our magic
             </p>
           </div>
         </main>

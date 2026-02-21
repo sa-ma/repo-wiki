@@ -2,13 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import {
-  useState,
-  useRef,
-  useEffect,
-  useMemo,
-  type FormEvent,
-} from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { X, Send, MessageSquare, Loader2 } from "lucide-react";
@@ -29,18 +23,11 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
 
-  const activeFeatureIdRef = useRef(activeFeatureId);
-  activeFeatureIdRef.current = activeFeatureId;
-
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
-        body: () => ({
-          owner,
-          repo,
-          activeFeatureId: activeFeatureIdRef.current,
-        }),
+        body: { owner, repo },
       }),
     [owner, repo]
   );
@@ -68,12 +55,12 @@ export function ChatPanel({
 
   const isLoading = status === "streaming" || status === "submitted";
 
-  function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     const text = input.trim();
     if (!text || isLoading) return;
     setInput("");
-    sendMessage({ text });
+    sendMessage({ text }, { body: { activeFeatureId } });
   }
 
   return (

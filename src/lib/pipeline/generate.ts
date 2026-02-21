@@ -92,6 +92,13 @@ async function runPipeline(
     );
   }
 
+  if (tree.truncated) {
+    console.warn(
+      "[pipeline] WARNING: Git tree for %s/%s was truncated by GitHub — wiki may be incomplete",
+      owner, repo,
+    );
+  }
+
   const gatherTime = Date.now() - pipelineStart;
   console.log(
     "[pipeline] Fetched metadata + tree for %s/%s in %dms (%d files)",
@@ -143,8 +150,10 @@ async function runPipeline(
     detail: `${validPaths.length} files selected`,
   });
 
+  const shas = new Map(tree.nodes.map((n) => [n.path, n.sha]));
+
   const fetchStart = Date.now();
-  const files = await prefetchFiles(owner, repo, validPaths);
+  const files = await prefetchFiles(owner, repo, validPaths, shas);
   const fetchTime = Date.now() - fetchStart;
 
   console.log("[pipeline] Fetched %d files in %dms", files.length, fetchTime);
