@@ -16,6 +16,10 @@ export async function fetchFileContent(
       throw new GitHubError(`Path is not a file: ${path}`, "NOT_FOUND", 404);
     }
 
+    if (!data.content) {
+      throw new GitHubError(`No content returned for file: ${path}`, "NOT_FOUND", 404);
+    }
+
     const content = Buffer.from(data.content, "base64").toString("utf-8");
 
     if (isBinary(content)) {

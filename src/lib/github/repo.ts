@@ -60,12 +60,12 @@ export async function fetchRepoTree(
 
     const nodes: TreeNode[] = allNodes
       .filter((n): n is typeof n & { type: "blob" } => n.type === "blob")
-      .filter((n) => isCleanPath(n.path ?? ""))
+      .filter((n) => n.path != null && n.sha != null && isCleanPath(n.path))
       .map((n) => ({
-        path: n.path!,
+        path: n.path as string,
         type: "blob" as const,
         size: n.size ?? null,
-        sha: n.sha!,
+        sha: n.sha as string,
       }));
 
     return {

@@ -21,6 +21,7 @@ interface WikiGeneratorProps {
 }
 
 const STEPS: { phase: PipelinePhase; label: string }[] = [
+  { phase: "connecting", label: "Connecting to server..." },
   { phase: "fetching_metadata", label: "Fetching repository data..." },
   { phase: "picking_files", label: "Analyzing source code..." },
   { phase: "fetching_files", label: "Reading key source files..." },
@@ -47,30 +48,50 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
     eventSourceRef.current = es;
 
     es.addEventListener("progress", (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      setState({
-        status: "loading",
-        phase: data.phase,
-        progress: data.progress,
-        detail: data.detail,
-      });
+      try {
+        const data = JSON.parse(e.data);
+        setState({
+          status: "loading",
+          phase: data.phase,
+          progress: data.progress,
+          detail: data.detail,
+        });
+      } catch {
+        // Ignore malformed progress events
+      }
     });
 
     es.addEventListener("complete", (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      setState({ status: "complete", wiki: data.wiki });
+      try {
+        const data = JSON.parse(e.data);
+        setState({ status: "complete", wiki: data.wiki });
+      } catch {
+        setState({
+          status: "error",
+          code: "PARSE_ERROR",
+          message: "Failed to parse wiki data. Please try again.",
+        });
+      }
       es.close();
     });
 
     es.addEventListener("error", (e: Event) => {
       if (e instanceof MessageEvent && e.data) {
-        const data = JSON.parse(e.data);
-        setState({
-          status: "error",
-          code: data.code,
-          message: data.message,
-          retryAfter: data.retryAfter,
-        });
+        try {
+          const data = JSON.parse(e.data);
+          setState({
+            status: "error",
+            code: data.code,
+            message: data.message,
+            retryAfter: data.retryAfter,
+          });
+        } catch {
+          setState({
+            status: "error",
+            code: "PARSE_ERROR",
+            message: "Received an error but could not parse details.",
+          });
+        }
       } else {
         setState({
           status: "error",
