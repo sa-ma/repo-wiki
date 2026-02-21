@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { fetchFileContent } from "@/lib/github";
 
-const MAX_LINES_PER_FILE = 200;
+const MAX_LINES_PER_FILE = 120;
 
 export interface PreFetchedFile {
   path: string;

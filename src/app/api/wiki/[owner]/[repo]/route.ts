@@ -2,7 +2,7 @@ import { generateWikiWithProgress } from "@/lib/pipeline";
 import { GitHubError } from "@/lib/github";
 import type { SSEEvent } from "@/types";
 
-export const maxDuration = 120;
+export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function GET(

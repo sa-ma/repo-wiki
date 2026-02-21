@@ -16,7 +16,7 @@ const PICKER_EXCLUDED_DIRS = new Set([
 ]);
 
 export function buildFilePickerPrompt(): string {
-  return `You are a code analyst selecting files to read from a GitHub repository. Your goal is to pick the ~15 most important files that will be used to generate a wiki about this project's user-facing features.
+  return `You are a code analyst selecting files to read from a GitHub repository. Your goal is to pick the ~10 most important files that will be used to generate a wiki about this project's user-facing features.
 
 ## Selection criteria
 
@@ -42,7 +42,7 @@ If this is a monorepo (multiple packages/apps), focus on the **primary/core pack
 
 ## Output
 
-Return exactly the file paths as they appear in the directory tree. Pick up to 15 files.`;
+Return exactly the file paths as they appear in the directory tree. Pick up to 10 files.`;
 }
 
 export function buildFilePickerContext(meta: RepoMeta, tree: RepoTree): string {
