@@ -1,5 +1,5 @@
 import { octokit } from "./client";
-import { GitHubError, mapOctokitError } from "./errors";
+import { mapOctokitError } from "./errors";
 import type { RepoMeta, RepoTree, TreeNode } from "./types";
 
 export async function fetchRepoMeta(
@@ -25,7 +25,7 @@ export async function fetchRepoMeta(
     languagesResult.status === "fulfilled" ? languagesResult.value.data : {};
   const readme =
     readmeResult.status === "fulfilled"
-      ? (readmeResult.value.data as unknown as string)
+      ? String(readmeResult.value.data)
       : null;
 
   return {
@@ -77,8 +77,6 @@ export async function fetchRepoTree(
     throw mapOctokitError(error);
   }
 }
-
-// --- Tree cleaning ---
 
 const EXCLUDED_DIRS = new Set([
   "node_modules",
