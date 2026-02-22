@@ -284,13 +284,20 @@ Every feature MUST include:
 
 2. **Write 2-5 sections.** Choose from: Overview, Public API / Entry Points, How It Works, Configuration, Usage Patterns, Integration Points. Always include an Overview section.
 
-3. **Code snippets must be VERBATIM** from the provided source files. Copy exact code with accurate file paths and line numbers. Never fabricate or modify code. Prefer snippets that show public API surfaces — exports, function signatures, class definitions, configuration schemas.
+3. **Code snippets must be VERBATIM** from the provided source files. Copy exact code with accurate file paths and line numbers. Never fabricate or modify code.
 
-4. **Citations must reference exact file paths and line numbers** from the provided files. Every section should have at least one citation linking back to the source code. Use empty arrays only if you truly have no relevant source.
+4. **Choose code snippets that show the USER-FACING INTERFACE, not internal helpers.** Prioritize in this order:
+   - **Interface definitions**: CLI argument parsers, exported function signatures, route handlers, config schemas, type definitions
+   - **Entry points**: main functions, command handlers, middleware registration, plugin hooks
+   - **Key mechanism**: the 2-5 lines that show HOW something works — not the full function body
 
-5. **Write from the user's perspective.** If a file contains internal implementation, cite it but explain what user-facing behavior it enables.
+   BAD: Dumping an entire 40-line internal function. GOOD: Showing the 5-line argument parser that defines \`--theme\`, \`--format\`, \`--output\` flags, because THAT is what the user interacts with.
 
-6. **Cross-reference other features** by their IDs in \`relatedFeatures\` when relevant.
+5. **Citations must reference exact file paths and line numbers** from the provided files. Every section should have at least one citation linking back to the source code. Use empty arrays only if you truly have no relevant source.
+
+6. **Write from the user's perspective.** Lead each section with what the user does (the command they run, the function they call, the config they set), then explain how it works internally. If a file contains only internal implementation, cite it but describe the user-facing behavior it enables.
+
+7. **Cross-reference other features** by their IDs in \`relatedFeatures\` when relevant.
 
 ## Output
 
@@ -304,8 +311,10 @@ export function buildFeatureDeepDiveContext(
   files: PreFetchedFile[],
   fullAnalysis: ArchitectureAnalysis,
 ): string {
+  const MAX_README_CHARS = 6000;
   const readmeExcerpt = meta.readme
-    ? meta.readme.slice(0, 2000)
+    ? meta.readme.slice(0, MAX_README_CHARS) +
+      (meta.readme.length > MAX_README_CHARS ? "\n\n[README truncated]" : "")
     : "(No README available)";
 
   const otherFeatures = fullAnalysis.features

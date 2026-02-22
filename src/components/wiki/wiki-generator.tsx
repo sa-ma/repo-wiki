@@ -462,7 +462,7 @@ function ProgressView({
             </div>
 
             <p className="text-xs text-muted-foreground/60">
-              This usually takes 30-60 seconds
+              Grab a coffee — first results appear in ~2 min
             </p>
           </div>
         </main>
