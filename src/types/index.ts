@@ -9,6 +9,7 @@ export type {
 export type {
   PipelinePhase,
   ProgressEvent,
+  FeatureCompleteEvent,
   CompleteEvent,
   ErrorEvent,
   SSEEvent,

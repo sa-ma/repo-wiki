@@ -1,7 +1,8 @@
-import type { ReactNode } from "react";
 import type { Feature, Citation, CodeSnippet } from "@/types";
 import { ExternalLink } from "lucide-react";
 import { HighlightedCode } from "./highlighted-code";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface WikiContentProps {
   feature: Feature;
@@ -42,8 +43,25 @@ export function WikiContent({ feature, repoUrl }: WikiContentProps) {
         {feature.sections.map((section) => (
           <section key={section.title} id={slugify(section.title)}>
             <h2 className="text-sm font-medium">{section.title}</h2>
-            <div className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {renderContentWithCitations(section.content, section.citations)}
+            <div className="prose-wiki mt-2 text-sm leading-relaxed text-muted-foreground">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  a: ({ href, children }) => (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] text-primary transition-colors hover:bg-primary/20"
+                    >
+                      {children}
+                      <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  ),
+                }}
+              >
+                {injectCitationLinks(section.content, section.citations)}
+              </ReactMarkdown>
             </div>
 
             {/* Code snippets */}
@@ -113,36 +131,16 @@ function CodeBlock({
   );
 }
 
-function renderContentWithCitations(text: string, citations: Citation[]) {
-  const parts: (string | ReactNode)[] = [];
-  let remaining = text;
-  let key = 0;
-
+/** Replace bracket citation references like [file.ts:10-20] with markdown links */
+function injectCitationLinks(text: string, citations: Citation[]): string {
+  let result = text;
   for (const citation of citations) {
     const label = `${citation.file}:${citation.startLine}-${citation.endLine}`;
     const bracketLabel = `[${label}]`;
-    const idx = remaining.indexOf(bracketLabel);
-
-    if (idx !== -1) {
-      parts.push(remaining.slice(0, idx));
-      parts.push(
-        <a
-          key={key++}
-          href={citation.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] text-primary transition-colors hover:bg-primary/20"
-        >
-          {citation.file}
-          <ExternalLink className="h-2.5 w-2.5" />
-        </a>
-      );
-      remaining = remaining.slice(idx + bracketLabel.length);
-    }
+    const mdLink = `[${citation.file}](${citation.url})`;
+    result = result.replaceAll(bracketLabel, mdLink);
   }
-
-  parts.push(remaining);
-  return parts;
+  return result;
 }
 
 function slugify(text: string) {

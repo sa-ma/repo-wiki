@@ -1,6 +1,6 @@
 import { generateWikiWithProgress } from "@/lib/pipeline";
 import { GitHubError } from "@/lib/github";
-import type { SSEEvent } from "@/types";
+import type { SSEEvent, FeatureCompleteEvent } from "@/types";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -19,21 +19,39 @@ export async function GET(
 
   const stream = new ReadableStream({
     async start(controller) {
-      function send(event: string, data: SSEEvent) {
-        controller.enqueue(
-          encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
-        );
+      // Heartbeat every 15s to keep connection alive during long LLM calls
+      const heartbeat = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(":heartbeat\n\n"));
+        } catch {
+          clearInterval(heartbeat);
+        }
+      }, 15_000);
+
+      function send(event: string, data: SSEEvent | FeatureCompleteEvent) {
+        try {
+          controller.enqueue(
+            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+          );
+        } catch {
+          // Client disconnected — ignore
+        }
       }
 
       try {
-        const wiki = await generateWikiWithProgress(owner, repo, (progress) => {
-          send("progress", progress);
+        const wiki = await generateWikiWithProgress(owner, repo, (event) => {
+          if (event.phase === "feature_complete") {
+            send("feature_complete", event);
+          } else {
+            send("progress", event);
+          }
         });
 
         send("complete", { phase: "complete", wiki });
       } catch (error) {
         send("error", mapErrorToSSE(error));
       } finally {
+        clearInterval(heartbeat);
         controller.close();
       }
     },

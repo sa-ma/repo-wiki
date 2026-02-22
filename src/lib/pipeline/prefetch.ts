@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { fetchFileContent } from "@/lib/github";
 
-const MAX_LINES_PER_FILE = 120;
+const DEFAULT_MAX_LINES = 120;
+const DEFAULT_CONCURRENCY = 10;
 
 export interface PreFetchedFile {
   path: string;
@@ -18,30 +19,32 @@ export async function prefetchFiles(
   repo: string,
   paths: string[],
   shas?: Map<string, string>,
+  maxLines = DEFAULT_MAX_LINES,
 ): Promise<PreFetchedFile[]> {
-  const results = await Promise.allSettled(
-    paths.map(async (path) => {
-      const file = await fetchFileContent(owner, repo, path, shas?.get(path));
-      const lines = file.content.split("\n");
-      const content =
-        lines.length > MAX_LINES_PER_FILE
-          ? lines.slice(0, MAX_LINES_PER_FILE).join("\n") +
-            `\n\n[Truncated: showing ${MAX_LINES_PER_FILE} of ${lines.length} lines]`
-          : file.content;
-      return { path, content };
-    }),
-  );
-
+  const queue = [...paths];
   const fulfilled: PreFetchedFile[] = [];
   const failed: string[] = [];
 
-  for (let i = 0; i < results.length; i++) {
-    if (results[i].status === "fulfilled") {
-      fulfilled.push((results[i] as PromiseFulfilledResult<PreFetchedFile>).value);
-    } else {
-      failed.push(paths[i]);
+  async function worker() {
+    while (queue.length > 0) {
+      const path = queue.shift()!;
+      try {
+        const file = await fetchFileContent(owner, repo, path, shas?.get(path));
+        const lines = file.content.split("\n");
+        const content =
+          lines.length > maxLines
+            ? lines.slice(0, maxLines).join("\n") +
+              `\n\n[Truncated: showing ${maxLines} of ${lines.length} lines]`
+            : file.content;
+        fulfilled.push({ path, content });
+      } catch {
+        failed.push(path);
+      }
     }
   }
+
+  const concurrency = Math.min(DEFAULT_CONCURRENCY, paths.length);
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
 
   if (failed.length > 0) {
     console.warn(

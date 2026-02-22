@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import type { Wiki, PipelinePhase } from "@/types";
+import type { Wiki, Feature, PipelinePhase } from "@/types";
 import { WikiShell } from "./wiki-shell";
+import { WikiContent } from "./wiki-content";
 import {
   Check,
   Circle,
@@ -23,13 +24,21 @@ interface WikiGeneratorProps {
 const STEPS: { phase: PipelinePhase; label: string }[] = [
   { phase: "connecting", label: "Connecting to server..." },
   { phase: "fetching_metadata", label: "Fetching repository data..." },
-  { phase: "picking_files", label: "Analyzing source code..." },
-  { phase: "fetching_files", label: "Reading key source files..." },
-  { phase: "generating_wiki", label: "Generating documentation..." },
+  { phase: "analyzing_architecture", label: "Analyzing codebase architecture..." },
+  { phase: "generating_features", label: "Generating feature documentation..." },
+  { phase: "assembling", label: "Assembling wiki..." },
 ];
 
 type GeneratorState =
-  | { status: "loading"; phase: PipelinePhase; progress: number; detail?: string }
+  | {
+      status: "loading";
+      phase: PipelinePhase;
+      progress: number;
+      detail?: string;
+      featuresTotal?: number;
+      featuresComplete?: number;
+      features: Feature[];
+    }
   | { status: "complete"; wiki: Wiki }
   | { status: "error"; code: string; message: string; retryAfter?: number };
 
@@ -38,7 +47,9 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
     status: "loading",
     phase: "connecting",
     progress: 0,
+    features: [],
   });
+  const [activeFeatureId, setActiveFeatureId] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const startConnection = useCallback(() => {
@@ -50,14 +61,41 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
     es.addEventListener("progress", (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data);
-        setState({
-          status: "loading",
-          phase: data.phase,
-          progress: data.progress,
-          detail: data.detail,
+        setState((prev) => {
+          const features = prev.status === "loading" ? prev.features : [];
+          return {
+            status: "loading",
+            phase: data.phase,
+            progress: data.progress,
+            detail: data.detail,
+            featuresTotal: data.featuresTotal ?? (prev.status === "loading" ? prev.featuresTotal : undefined),
+            featuresComplete: data.featuresComplete ?? (prev.status === "loading" ? prev.featuresComplete : undefined),
+            features,
+          };
         });
       } catch {
         // Ignore malformed progress events
+      }
+    });
+
+    es.addEventListener("feature_complete", (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        setState((prev) => {
+          if (prev.status !== "loading") return prev;
+          const features = [...prev.features, data.feature as Feature];
+          return {
+            ...prev,
+            features,
+            featuresTotal: data.featuresTotal,
+            featuresComplete: data.featuresComplete,
+            progress: 30 + (data.featuresComplete / data.featuresTotal) * 60,
+          };
+        });
+        // Auto-select first feature
+        setActiveFeatureId((prev) => prev ?? data.feature.id);
+      } catch {
+        // Ignore malformed feature events
       }
     });
 
@@ -66,10 +104,19 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
         const data = JSON.parse(e.data);
         setState({ status: "complete", wiki: data.wiki });
       } catch {
-        setState({
-          status: "error",
-          code: "PARSE_ERROR",
-          message: "Failed to parse wiki data. Please try again.",
+        // If complete event parse fails but we have features, use them
+        setState((prev) => {
+          if (prev.status === "loading" && prev.features.length > 0) {
+            return {
+              status: "complete",
+              wiki: buildWikiFromFeatures(owner, repo, prev.features),
+            };
+          }
+          return {
+            status: "error",
+            code: "PARSE_ERROR",
+            message: "Failed to parse wiki data. Please try again.",
+          };
         });
       }
       es.close();
@@ -93,10 +140,19 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
           });
         }
       } else {
-        setState({
-          status: "error",
-          code: "CONNECTION_ERROR",
-          message: "Lost connection to the server. Please try again.",
+        // Connection lost — if we have features, gracefully complete with them
+        setState((prev) => {
+          if (prev.status === "loading" && prev.features.length > 0) {
+            return {
+              status: "complete",
+              wiki: buildWikiFromFeatures(owner, repo, prev.features),
+            };
+          }
+          return {
+            status: "error",
+            code: "CONNECTION_ERROR",
+            message: "Lost connection to the server. Please try again.",
+          };
         });
       }
       es.close();
@@ -109,7 +165,8 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
   }, [startConnection]);
 
   function handleRetry() {
-    setState({ status: "loading", phase: "connecting", progress: 0 });
+    setActiveFeatureId(null);
+    setState({ status: "loading", phase: "connecting", progress: 0, features: [] });
     startConnection();
   }
 
@@ -124,6 +181,22 @@ export function WikiGenerator({ owner, repo }: WikiGeneratorProps) {
         message={state.message}
         retryAfter={state.retryAfter}
         onRetry={handleRetry}
+      />
+    );
+  }
+
+  // Show incremental feature view once features start arriving
+  if (state.features.length > 0) {
+    return (
+      <IncrementalView
+        owner={owner}
+        repo={repo}
+        features={state.features}
+        activeFeatureId={activeFeatureId}
+        onSelectFeature={setActiveFeatureId}
+        featuresTotal={state.featuresTotal ?? 0}
+        featuresComplete={state.featuresComplete ?? 0}
+        progress={state.progress}
       />
     );
   }
@@ -184,6 +257,127 @@ function StepIcon({ state }: { state: "pending" | "active" | "done" }) {
     return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
   }
   return <Circle className="h-3.5 w-3.5 text-muted-foreground/40" />;
+}
+
+/* ─── Incremental View (features arriving) ─── */
+
+function IncrementalView({
+  owner,
+  repo,
+  features,
+  activeFeatureId,
+  onSelectFeature,
+  featuresTotal,
+  featuresComplete,
+  progress,
+}: {
+  owner: string;
+  repo: string;
+  features: Feature[];
+  activeFeatureId: string | null;
+  onSelectFeature: (id: string | null) => void;
+  featuresTotal: number;
+  featuresComplete: number;
+  progress: number;
+}) {
+  const activeFeature = features.find((f) => f.id === activeFeatureId);
+  const repoUrl = `https://github.com/${owner}/${repo}`;
+  const remaining = featuresTotal - featuresComplete;
+
+  return (
+    <div className="flex h-svh flex-col">
+      {/* Header with progress indicator */}
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border/60 px-4">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 20 20"
+            fill="none"
+            className="text-primary"
+          >
+            <path
+              d="M3 4h14M3 8h10M3 12h12M3 16h8"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+          </svg>
+          RepoWiki
+        </Link>
+        <span className="text-muted-foreground/40">/</span>
+        <span className="font-mono text-xs text-muted-foreground">{repo}</span>
+
+        {remaining > 0 && (
+          <div className="ml-auto flex items-center gap-2">
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            <span className="text-xs text-muted-foreground">
+              {featuresComplete} of {featuresTotal} features
+            </span>
+            <div className="hidden w-24 sm:block">
+              <div className="h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-1000 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar with completed features + skeleton placeholders */}
+        <aside className="hidden w-56 border-r border-border/60 bg-sidebar md:block">
+          <nav className="flex h-full flex-col gap-0.5 overflow-y-auto p-2">
+            <p className="px-2 py-2 text-[11px] font-medium uppercase tracking-widest text-muted-foreground/50">
+              Features
+            </p>
+            {features.map((feature) => (
+              <button
+                key={feature.id}
+                onClick={() => onSelectFeature(feature.id)}
+                className={`rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+                  feature.id === activeFeatureId
+                    ? "bg-accent text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                }`}
+              >
+                {feature.name}
+              </button>
+            ))}
+            {/* Skeleton placeholders for remaining features */}
+            {Array.from({ length: remaining }, (_, i) => (
+              <div
+                key={`skeleton-${i}`}
+                className="h-7 animate-pulse rounded-md bg-muted/60"
+                style={{ width: `${60 + ((i * 17) % 30)}%` }}
+              />
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-y-auto p-6 md:p-10">
+          {activeFeature ? (
+            <WikiContent feature={activeFeature} repoUrl={repoUrl} />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  Generating features...
+                </p>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
 }
 
 /* ─── Progress view ─── */
@@ -268,7 +462,7 @@ function ProgressView({
             </div>
 
             <p className="text-xs text-muted-foreground/60">
-              This can take up to 5 minutes — go grab a coffee while we work our magic
+              This usually takes 30-60 seconds
             </p>
           </div>
         </main>
@@ -348,6 +542,16 @@ function ErrorView({
       </main>
     </div>
   );
+}
+
+function buildWikiFromFeatures(owner: string, repo: string, features: Feature[]): Wiki {
+  return {
+    repoUrl: `https://github.com/${owner}/${repo}`,
+    repoName: repo,
+    description: "",
+    generatedAt: new Date().toISOString(),
+    features,
+  };
 }
 
 function formatCountdown(seconds: number): string {

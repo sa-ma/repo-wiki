@@ -1,20 +1,31 @@
 import type { Wiki } from "./wiki";
+import type { Feature } from "./wiki";
 
 export type PipelinePhase =
   | "connecting"
   | "fetching_metadata"
-  | "picking_files"
-  | "fetching_files"
-  | "generating_wiki"
+  | "analyzing_architecture"
+  | "generating_features"
+  | "assembling"
   | "complete"
   | "error";
 
 export interface ProgressEvent {
   phase: PipelinePhase;
   message: string;
-  /** 0–100, approximate */
+  /** 0-100, approximate */
   progress: number;
   detail?: string;
+  featuresTotal?: number;
+  featuresComplete?: number;
+}
+
+export interface FeatureCompleteEvent {
+  phase: "feature_complete";
+  feature: Feature;
+  featureIndex: number;
+  featuresTotal: number;
+  featuresComplete: number;
 }
 
 export interface CompleteEvent {
@@ -29,4 +40,4 @@ export interface ErrorEvent {
   retryAfter?: number;
 }
 
-export type SSEEvent = ProgressEvent | CompleteEvent | ErrorEvent;
+export type SSEEvent = ProgressEvent | FeatureCompleteEvent | CompleteEvent | ErrorEvent;
